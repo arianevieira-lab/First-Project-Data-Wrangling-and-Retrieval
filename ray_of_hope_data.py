@@ -27,16 +27,20 @@ WB_INDICATORS = {
     "gdp_per_capita_usd": "NY.GDP.PCAP.CD",
 }
 
-# El GBD contiene categorías en portugués. Se utiliza Babel para obtener
-# nombres localizados y pycountry para convertir ISO2 en ISO3.
+# El GBD contiene categorías en portugués. Se utilizan variantes
+# del portugués de Brasil y Portugal para ampliar las equivalencias.
 try:
     import pycountry
     from babel import Locale
 
-    _PT_TERRITORIES = Locale("pt").territories
-except ImportError:  # Se mantiene un fallback si faltan dependencias opcionales.
+    _PT_TERRITORIES = [
+        Locale.parse("pt_BR").territories,
+        Locale.parse("pt").territories,
+    ]
+
+except ImportError:
     pycountry = None
-    _PT_TERRITORIES = {}
+    _PT_TERRITORIES = []
 
 
 # Equivalencias puntuales para nombres del IHME que pueden diferir de Babel,
@@ -98,28 +102,30 @@ def _crear_mapa_iso3() -> Dict[str, str]:
     mapa: Dict[str, str] = {}
 
     if pycountry is not None:
-        # Nombres en portugués proporcionados por Babel.
-        for iso2, nombre_pt in _PT_TERRITORIES.items():
-            try:
-                pais = pycountry.countries.get(alpha_2=iso2)
-                if pais:
-                    mapa[_normalizar_texto(nombre_pt)] = pais.alpha_3
-            except (KeyError, AttributeError):
-                continue
 
-        # También se aceptan nombres oficiales, comunes y códigos ISO.
+        # Nombres en portugués de Brasil y Portugal.
+        for territorios in _PT_TERRITORIES:
+            for iso2, nombre_pt in territorios.items():
+                if len(iso2) == 2:
+                    pais = pycountry.countries.get(alpha_2=iso2)
+
+                    if pais:
+                        mapa[_normalizar_texto(nombre_pt)] = pais.alpha_3
+
+        # Nombres oficiales, comunes y códigos ISO.
         for pais in pycountry.countries:
             mapa[_normalizar_texto(pais.name)] = pais.alpha_3
             mapa[_normalizar_texto(pais.alpha_2)] = pais.alpha_3
             mapa[_normalizar_texto(pais.alpha_3)] = pais.alpha_3
+
             if hasattr(pais, "common_name"):
                 mapa[_normalizar_texto(pais.common_name)] = pais.alpha_3
 
+    # Equivalencias específicas del IHME.
     for nombre, iso3 in MANUAL_ISO3.items():
         mapa[_normalizar_texto(nombre)] = iso3
 
     return mapa
-
 
 ISO3_BY_NAME = _crear_mapa_iso3()
 
